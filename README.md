@@ -11,8 +11,8 @@ Creating backup sites in the clouds through WebDav
 * Yandex Disk
 * GoogleDrive working through service [dav-pocket](https://dav-pocket.appspot.com/)
 * DropBox working through service [dropdav](https://www.dropdav.com/)
-* ~~Mail Disk~~
-* ~~OneDrive~~
+* ~~Mail Disk~~ temporary does not work
+* ~~OneDrive~~ temporary does not work
 
 ### Example of work
 ```php
