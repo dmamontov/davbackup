@@ -8,11 +8,11 @@ Creating backup sites in the clouds through WebDav
 * PHP version 5.3.6 or higher
 
 ### Supported clouds
-* Yandex Disk
-* GoogleDrive working through service [dav-pocket](https://dav-pocket.appspot.com/)
-* DropBox working through service [dropdav](https://www.dropdav.com/)
-* ~~Mail Disk~~ temporary does not work
-* ~~OneDrive~~ temporary does not work
+* `Yandex Disk`
+* `GoogleDrive` working through service [dav-pocket](https://dav-pocket.appspot.com/)
+* `DropBox` working through service [dropdav](https://www.dropdav.com/)
+* ~~`Mail Disk`~~ temporary does not work
+* ~~`OneDrive`~~ temporary does not work
 
 ### Example of work
 ```php
