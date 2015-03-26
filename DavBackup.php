@@ -239,7 +239,7 @@ abstract class DavBackup
             $column = $sql->columnCount();
             $rows = $sql->rowCount();
 
-            $result = 'DROP TABLE IF EXISTS `'.$table.'`;';
+            $result = "DROP TABLE IF EXISTS `$table`;";
 
             $structure = $db->query("SHOW CREATE TABLE $table");
 
