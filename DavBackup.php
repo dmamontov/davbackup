@@ -174,11 +174,8 @@ abstract class DavBackup
             );
 
             unlink(__DIR__ . '/' . self::TMPPATH . '/' . $realName);
-            if ($send->code == 201) {
-                return true;
-            } else {
-                return false;
-            }
+            
+            return $send->code == 201 ? true : false;
         }
     }
 
@@ -296,19 +293,14 @@ abstract class DavBackup
                 }
 
                 $count++;
-                if ($count < $rows) {
-                    $result .= '),';
-                } else {
-                    $result .= ');';
-                }
+                $result .= $count < $rows ? '),' : ');';
 
                 fwrite($file, $result);
 
                 $result = '';
             }
 
-            $result = "\n\n--------------------------------------------------- \n\n";
-            fwrite($file, $result);
+            fwrite($file, "\n\n--------------------------------------------------- \n\n");
         }
 
         fclose($file);
