@@ -24,7 +24,7 @@ $ya->db('user', 'password', 'db');
 $ya->folder('/var/www/public_html/');
 $ya->backup();
 ```
-### Example add WebDav cloud
+### Example of adding support for WebDav cloud
 ```php
 class MyDavBackup extends DavBackup
 {
