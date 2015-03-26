@@ -24,3 +24,15 @@ $ya->db('user', 'password', 'db');
 $ya->folder('/var/www/public_html/');
 $ya->backup();
 ```
+### Example add WebDav cloud
+```php
+class MyDavBackup extends DavBackup
+{
+    const URL = 'https://dav.my.ru/';
+
+    public function __construct($login, $password)
+    {
+        parent::__construct(self::URL, (string) $login, (string) $password);
+    }
+}
+```
