@@ -102,6 +102,13 @@ abstract class DavBackup
      * @access public
      */
     public $compression = true;
+    
+    /**
+     * Type of authorization
+     * @var string
+     * @access public
+     */
+    public $authtype = '';
 
     /**
      * Sets variables and creates the required directory
@@ -153,6 +160,7 @@ abstract class DavBackup
                     __DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.sql',
                     'sql/' . self::$time . '.sql'
                 );
+                unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.sql');
             }
 
             if ($this->compression == true) {
@@ -160,7 +168,6 @@ abstract class DavBackup
                 unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.tar');
             }
 
-            unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.sql');
         } catch (Exception $e) {
             throw new RuntimeException("Failed to create the archive: $e");
         }
@@ -170,17 +177,13 @@ abstract class DavBackup
         if (file_exists(__DIR__ . '/' . self::TMPPATH . '/' . $realName)) {
             $send = $this->request(
                 self::$url . self::REMOTEDIR . '/' . $realName,
-                array(),
+                array('Content-type: application/octet-stream'),
                 'PUT',
                 __DIR__ . '/' . self::TMPPATH . '/' . $realName
             );
-
             unlink(__DIR__ . '/' . self::TMPPATH . '/' . $realName);
-            if ($send->code == 201) {
-                return true;
-            } else {
-                return false;
-            }
+
+            return $send->code == 201 ? true : false;
         }
     }
 
@@ -327,12 +330,18 @@ abstract class DavBackup
      */
     final private function request($url, $headers = array(), $method = '', $file = null)
     {
-        $ch = curl_init($url);
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_FAILONERROR, false);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERPWD, implode(':', self::$credentials));
+
+        if (empty($this->authtype) === false) {
+            curl_setopt($ch, CURLOPT_HTTPAUTH, $this->authtype);
+        }
 
         if (empty($headers) === false) {
             curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
@@ -348,6 +357,7 @@ abstract class DavBackup
 
         $response = curl_exec($ch);
         $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
         curl_close($ch);
 
         $result = new stdClass();
@@ -447,6 +457,37 @@ class DropBoxBackup extends DavBackup
     public function __construct($login, $password)
     {
         parent::__construct(self::URL, (string) $login, (string) $password);
+    }
+}
+
+/**
+ * CloudMeBackup - backup in CloudMe.
+ *
+ * @author    Dmitry Mamontov <d.slonyara@gmail.com>
+ * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
+ * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
+ * @version   Release: 1.0.0
+ * @link      https://github.com/dmamontov/davbackup
+ * @since     Class available since Release 1.0.0
+ */
+class CloudMeBackup extends DavBackup
+{
+    /**
+     * URL to the cloud
+     */
+    const URL = 'http://webdav.cloudme.com/';
+
+    /**
+     * Sets variables
+     * @param string $url
+     * @param string $login
+     * @return void
+     * @access public
+     */
+    public function __construct($login, $password)
+    {
+        $this->authtype = CURLAUTH_ANY;
+        parent::__construct(self::URL . "$login/CloudDrive/Documents/", (string) $login, (string) $password);
     }
 }
 

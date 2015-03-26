@@ -9,6 +9,7 @@ Creating backup sites in the clouds through WebDav
 
 ### Supported clouds
 * `Yandex Disk`
+* `CloudMe`
 * `GoogleDrive` working through service [dav-pocket](https://dav-pocket.appspot.com/)
 * `DropBox` working through service [dropdav](https://www.dropdav.com/)
 * ~~`Mail Disk`~~ temporary does not work
