@@ -113,6 +113,8 @@ abstract class DavBackup
      */
     protected function __construct($url, $login, $password)
     {
+        ini_set('memory_limit','-1');
+
         self::$url = $url;
         self::$credentials = array($login, $password);
         self::$time = time();
@@ -174,8 +176,11 @@ abstract class DavBackup
             );
 
             unlink(__DIR__ . '/' . self::TMPPATH . '/' . $realName);
-            
-            return $send->code == 201 ? true : false;
+            if ($send->code == 201) {
+                return true;
+            } else {
+                return false;
+            }
         }
     }
 
@@ -244,6 +249,8 @@ abstract class DavBackup
             $notexists = str_replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS', $row[1]);
             $result .= "\n\n$notexists;\n\n";
 
+            unset($structure, $notexists);
+
             fwrite($file, $result);
 
             $result = '';
@@ -264,6 +271,7 @@ abstract class DavBackup
                         $result .= ', ';
                     }
                 }
+                unset($columns);
 
                 $result .= ') VALUES';
 
@@ -304,6 +312,7 @@ abstract class DavBackup
         }
 
         fclose($file);
+        unset($file, $result, $tables, $sql, $column, $rows, $row);
     }
 
     /**
@@ -388,7 +397,7 @@ class YandexBackup extends DavBackup
  * @version   Release: 1.0.0
  * @link      https://github.com/dmamontov/davbackup
  * @since     Class available since Release 1.0.0
- * @todo      working through service dav-pocket.appspot.com
+ * @todo      working through service appspot.com
  */
 class GoogleBackup extends DavBackup
 {
