@@ -311,7 +311,7 @@ abstract class DavBackup
                 $result = '';
             }
 
-            fwrite($file, "\n\n--------------------------------------------------- \n\n");
+            fwrite($file, "\n\n\n\n");
         }
 
         fclose($file);
