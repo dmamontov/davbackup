@@ -1,7 +1,5 @@
 [![Latest Stable Version](https://poser.pugx.org/dmamontov/davbackup/v/stable.svg)](https://packagist.org/packages/dmamontov/davbackup)
 [![License](https://poser.pugx.org/dmamontov/davbackup/license.svg)](https://packagist.org/packages/dmamontov/davbackup)
-[![Total Downloads](https://poser.pugx.org/dmamontov/davbackup/downloads)](https://packagist.org/packages/dmamontov/davbackup)
-
 
 PHP Backup to WebDav Server
 ===========================
