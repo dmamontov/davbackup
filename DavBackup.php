@@ -387,8 +387,8 @@ class YandexBackup extends DavBackup
 
     /**
      * Sets variables
-     * @param string $url
      * @param string $login
+     * @param string $password
      * @return void
      * @access public
      */
@@ -418,8 +418,8 @@ class GoogleBackup extends DavBackup
 
     /**
      * Sets variables
-     * @param string $url
      * @param string $login
+     * @param string $password
      * @return void
      * @access public
      */
@@ -449,8 +449,8 @@ class DropBoxBackup extends DavBackup
 
     /**
      * Sets variables
-     * @param string $url
      * @param string $login
+     * @param string $password
      * @return void
      * @access public
      */
@@ -479,8 +479,8 @@ class CloudMeBackup extends DavBackup
 
     /**
      * Sets variables
-     * @param string $url
      * @param string $login
+     * @param string $password
      * @return void
      * @access public
      */
@@ -511,8 +511,8 @@ class MailBackup extends DavBackup
 
     /**
      * Sets variables
-     * @param string $url
      * @param string $login
+     * @param string $password
      * @return void
      * @access public
      */
@@ -543,8 +543,8 @@ class OneDriveBackup extends DavBackup
 
     /**
      * Sets variables
-     * @param string $url
      * @param string $login
+     * @param string $password
      * @param string $cid
      * @return void
      * @access public
