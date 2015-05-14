@@ -555,5 +555,3 @@ class OneDriveBackup extends DavBackup
         //parent::__construct(self::URL . $cid . '/', (string) $login, (string) $password);
     }
 }
-
-?>
