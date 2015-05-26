@@ -1,4 +1,4 @@
-<?
+<?php
 /**
  * DavBackup
  *
@@ -38,18 +38,18 @@
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @since     File available since Release 1.0.0
+ * @since     File available since Release 1.0.1
  */
 
 /**
- * DavBackup main class implements backup and sending it to the cloud. 
+ * DavBackup main class implements backup and sending it to the cloud.
  *
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.0
+ * @version   Release: 1.0.1
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.0
+ * @since     Class available since Release 1.0.1
  * @abstract
  */
 abstract class DavBackup
@@ -63,6 +63,16 @@ abstract class DavBackup
      * Directory for the temporary storage of backups
      */
     const TMPPATH = 'tmp';
+
+    /*
+     * Archive Type TAR
+     */
+    const TAR = 0;
+
+    /*
+     * Archive Type ZIP
+     */
+    const ZIP = 1;
 
     /**
      * URL to the cloud
@@ -89,20 +99,27 @@ abstract class DavBackup
     private static $path;
 
     /**
-     * Current time
-     * @var int
+     * The name of the archive
+     * @var string
      * @static
      * @access private
      */
-    private static $time;
+    private static $name;
+
+    /**
+     * Archive Type
+     * @var integer
+     * @access public
+     */
+    public $type = 0;
 
     /**
      * Compression
      * @var bool
      * @access public
      */
-    public $compression = true;
-    
+    public $compression = false;
+
     /**
      * Type of authorization
      * @var string
@@ -120,11 +137,11 @@ abstract class DavBackup
      */
     protected function __construct($url, $login, $password)
     {
-        ini_set('memory_limit','-1');
+        ini_set('memory_limit', '-1');
 
         self::$url = $url;
         self::$credentials = array($login, $password);
-        self::$time = time();
+        self::$name = (string) time();
 
         if (file_exists(__DIR__ . '/' . self::TMPPATH . '/') == false) {
             mkdir(__DIR__ . '/' . self::TMPPATH . '/', 0755);
@@ -150,29 +167,69 @@ abstract class DavBackup
         }
 
         try {
-            $archive = new PharData(__DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.tar');
+            switch ($this->type) {
+                case self::TAR:
+                    $archive = new PharData(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.tar');
+                    break;
+                case self::ZIP:
+                    $archive = new ZipArchive();
+                    $archive->open(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.zip', ZIPARCHIVE::CREATE);
+                    break;
+            }
+
             if (is_null(self::$path) == false) {
-                $archive->buildFromDirectory(self::$path);
-            }
+                switch ($this->type) {
+                    case self::TAR:
+                        $archive->buildFromDirectory(self::$path);
+                        break;
+                    case self::ZIP:
+                        self::$path = str_replace('\\', '/', realpath(self::$path));
+                        $files = new RecursiveIteratorIterator(
+                                     new RecursiveDirectoryIterator(self::$path),
+                                     RecursiveIteratorIterator::SELF_FIRST
+                                 );
 
-            if (file_exists(__DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.sql')) {
+                        foreach ($files as $file) {
+                            $file = str_replace('\\', '/', $file);
+                            if (in_array(substr($file, strrpos($file, '/') + 1), array('.', '..'))) {
+                                continue;
+                            }
+
+                            $file = realpath($file);
+                            if (is_file($file) === true) {
+                                $archive->addFile($file, str_replace(self::$path . '/', '', $file));
+                            }
+                        }
+                        break;
+                }
+            }
+            if (file_exists(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql')) {
                 $archive->addFile(
-                    __DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.sql',
-                    'sql/' . self::$time . '.sql'
+                    __DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql',
+                    'sql/' . self::$name . '.sql'
                 );
-                unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.sql');
             }
 
-            if ($this->compression == true) {
+            if ($this->compression == true && $this->type == self::TAR) {
                 $archive->compress(Phar::GZ);
-                unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.tar');
+                unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.tar');
             }
 
+            if ($this->type == self::ZIP) {
+                $archive->close();
+            }
         } catch (Exception $e) {
             throw new RuntimeException("Failed to create the archive: $e");
         }
 
-        $realName = self::$time . '.tar' . ($this->compression == true ? '.gz' : '');
+        switch ($this->type) {
+            case self::TAR:
+                $realName = self::$name . '.tar' . ($this->compression == true ? '.gz' : '');
+                break;
+            case self::ZIP:
+                $realName = self::$name . '.zip';
+                break;
+        }
 
         if (file_exists(__DIR__ . '/' . self::TMPPATH . '/' . $realName)) {
             $send = $this->request(
@@ -181,9 +238,101 @@ abstract class DavBackup
                 'PUT',
                 __DIR__ . '/' . self::TMPPATH . '/' . $realName
             );
+
+            if (file_exists(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql')) {
+                unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql');
+            }
             unlink(__DIR__ . '/' . self::TMPPATH . '/' . $realName);
 
             return $send->code == 201 ? true : false;
+        }
+    }
+
+    /**
+     * Set the compression of the archive
+     * @param bool $compression
+     * @return bool
+     * @access public
+     * @final
+     */
+    final public function setCompression($compression = true)
+    {
+        $this->compression = (bool) $compression;
+
+        return true;
+    }
+
+    /**
+     * Gets a compressed archive
+     * @return bool
+     * @access public
+     * @final
+     */
+    final public function getCompression()
+    {
+        return $this->compression;
+    }
+
+    /**
+     * Sets the name of the archive
+     * @param mixed $name
+     * @return bool
+     * @access public
+     * @final
+     */
+    final public function setName($name = null)
+    {
+        if (is_null($name)) {
+            self::$name = time();
+        } else {
+            self::$name = (string) time() . '-' . str_replace(array(' ', "\n", "\t", '_'), '-', strtolower($name));
+        }
+
+        return true;
+    }
+
+    /**
+     * It gets the name of the archive
+     * @return string
+     * @access public
+     * @final
+     */
+    final public function getName()
+    {
+        return self::$name;
+    }
+
+    /**
+     * Sets type of archive
+     * @param int $type
+     * @return bool
+     * @access public
+     * @final
+     */
+    final public function setType($type = 0)
+    {
+        if (in_array($type, array(0, 1))) {
+            $this->type = (int) $type;
+        } else {
+            $this->type = 0;
+        }
+
+        return true;
+    }
+
+    /**
+     * Gets type of archive
+     * @return string
+     * @access public
+     * @final
+     */
+    final public function getType()
+    {
+        switch ($this->type) {
+            case self::TAR:
+                return 'tar';
+            case self::ZIP:
+                return 'zip';
         }
     }
 
@@ -198,6 +347,7 @@ abstract class DavBackup
     {
         if (file_exists($path) && is_dir($path)) {
             self::$path = $path;
+
             return true;
         }
 
@@ -231,7 +381,7 @@ abstract class DavBackup
         $db = new PDO("$driver:host=$host;dbname=$dbname", $dbuser, $dbpass);
         $db->setAttribute(PDO::ATTR_ORACLE_NULLS, PDO::NULL_NATURAL);
 
-        $file = fopen(__DIR__ . '/' . self::TMPPATH . '/' . self::$time . '.sql', 'a+');
+        $file = fopen(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql', 'a+');
 
         $tables = array();
         $sql = $db->query('SHOW TABLES');
@@ -239,7 +389,7 @@ abstract class DavBackup
             array_push($tables, $row[0]);
         }
 
-        foreach($tables as $table) {
+        foreach ($tables as $table) {
             $sql = $db->query("SELECT * FROM $table");
             $column = $sql->columnCount();
             $rows = $sql->rowCount();
@@ -287,13 +437,11 @@ abstract class DavBackup
             while ($row = $sql->fetch(PDO::FETCH_NUM)) {
                 $result .= "\n\t(";
 
-                for($i=0; $i < $column; $i++) {
-                    if (isset($row[$i])) {
-                        if (in_array($type[$table][$i], $types) && empty($row[$i]) == false) {
-                            $result .= $row[$i];
-                        } else {
-                            $result .= $db->quote($row[$i]);
-                        }
+                for ($i=0; $i < $column; $i++) {
+                    if (isset($row[$i]) && in_array($type[$table][$i], $types) && empty($row[$i]) == false) {
+                        $result .= $row[$i];
+                    } elseif(isset($row[$i])) {
+                        $result .= $db->quote($row[$i]);
                     } else {
                         $result .= 'NULL';
                     }
@@ -374,9 +522,9 @@ abstract class DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.0
+ * @version   Release: 1.0.1
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.0
+ * @since     Class available since Release 1.0.1
  */
 class YandexBackup extends DavBackup
 {
@@ -387,8 +535,8 @@ class YandexBackup extends DavBackup
 
     /**
      * Sets variables
+     * @param string $url
      * @param string $login
-     * @param string $password
      * @return void
      * @access public
      */
@@ -400,13 +548,13 @@ class YandexBackup extends DavBackup
 
 /**
  * GoogleBackup - backup in GoogleDrive.
- * 
+ *
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.0
+ * @version   Release: 1.0.1
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.0
+ * @since     Class available since Release 1.0.1
  * @todo      working through service appspot.com
  */
 class GoogleBackup extends DavBackup
@@ -418,8 +566,8 @@ class GoogleBackup extends DavBackup
 
     /**
      * Sets variables
+     * @param string $url
      * @param string $login
-     * @param string $password
      * @return void
      * @access public
      */
@@ -435,9 +583,9 @@ class GoogleBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.0
+ * @version   Release: 1.0.1
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.0
+ * @since     Class available since Release 1.0.1
  * @todo      working through service dropdav.com
  */
 class DropBoxBackup extends DavBackup
@@ -449,8 +597,8 @@ class DropBoxBackup extends DavBackup
 
     /**
      * Sets variables
+     * @param string $url
      * @param string $login
-     * @param string $password
      * @return void
      * @access public
      */
@@ -466,9 +614,9 @@ class DropBoxBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.0
+ * @version   Release: 1.0.1
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.0
+ * @since     Class available since Release 1.0.1
  */
 class CloudMeBackup extends DavBackup
 {
@@ -479,8 +627,8 @@ class CloudMeBackup extends DavBackup
 
     /**
      * Sets variables
+     * @param string $url
      * @param string $login
-     * @param string $password
      * @return void
      * @access public
      */
@@ -497,9 +645,9 @@ class CloudMeBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.0
+ * @version   Release: 1.0.1
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.0
+ * @since     Class available since Release 1.0.1
  * @todo      mail.ru temporarily disable access to WebDAV
  */
 class MailBackup extends DavBackup
@@ -511,8 +659,8 @@ class MailBackup extends DavBackup
 
     /**
      * Sets variables
+     * @param string $url
      * @param string $login
-     * @param string $password
      * @return void
      * @access public
      */
@@ -529,9 +677,9 @@ class MailBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.0
+ * @version   Release: 1.0.1
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.0
+ * @since     Class available since Release 1.0.1
  * @todo      microsoft temporarily disable access to WebDAV
  */
 class OneDriveBackup extends DavBackup
@@ -543,8 +691,8 @@ class OneDriveBackup extends DavBackup
 
     /**
      * Sets variables
+     * @param string $url
      * @param string $login
-     * @param string $password
      * @param string $cid
      * @return void
      * @access public

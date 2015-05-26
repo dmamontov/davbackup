@@ -3,7 +3,7 @@
     "description": "Creating backup sites in the clouds through WebDav",
     "type": "library",
     "keywords": ["webdav", "backup"],
-    "version": "1.0.0",
+    "version": "1.0.1",
     "license": "BSD-3-Clause",
     "homepage": "http://www.slobel.ru/",
     "authors": [

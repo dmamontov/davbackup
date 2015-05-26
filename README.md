@@ -31,7 +31,7 @@ The package comes with several sub-classes specialized in configuring the connec
 
 2) Follow in the project folder:
 ```bash
-composer require dmamontov/davbackup ~1.0.0
+composer require dmamontov/davbackup ~1.0.1
 ```
 
 In config `composer.json` your project will be added to the library `dmamontov/davbackup`, who settled in the folder `vendor/`. In the absence of a config file or folder with vendors they will be created.
@@ -46,10 +46,16 @@ require 'path/to/vendor/autoload.php';
 require 'DavBackup.php';
 
 $ya = new YandexBackup('test@yandex.ru', 'test');
+
+$ya->setName('My Backup');
+$ya->setType(YandexBackup::ZIP);
+
 $ya->db('user', 'password', 'db');
 $ya->folder('/var/www/public_html/');
+
 $ya->backup();
 ```
+
 ### Example of adding support for WebDav cloud
 ```php
 class MyDavBackup extends DavBackup
