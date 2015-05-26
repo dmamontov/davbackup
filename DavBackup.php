@@ -440,7 +440,7 @@ abstract class DavBackup
                 for ($i=0; $i < $column; $i++) {
                     if (isset($row[$i]) && in_array($type[$table][$i], $types) && empty($row[$i]) == false) {
                         $result .= $row[$i];
-                    } elseif(isset($row[$i])) {
+                    } elseif (isset($row[$i])) {
                         $result .= $db->quote($row[$i]);
                     } else {
                         $result .= 'NULL';
