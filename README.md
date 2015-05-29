@@ -45,11 +45,11 @@ require 'path/to/vendor/autoload.php';
 ```php
 require 'DavBackup.php';
 
-$ya = new YandexBackup('mamontov-ebay@yandex.ru', 'L!s9r5!F');
+$ya = new YandexBackup('test@yandex.ru', 'test');
 $ya->setName('My Backup');
 $ya->setType(YandexBackup::ZIP);
 
-$ya->db('slobel_mama', '14101990', 'slobel_mama');
+$ya->db('slobel_mama', 'test', 'slobel_mama');
 $ya->folder('/home/s/slobel/public_html/classes/');
 $ya->backup();
 ```
