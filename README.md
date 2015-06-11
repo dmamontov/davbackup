@@ -1,5 +1,7 @@
 [![Latest Stable Version](https://poser.pugx.org/dmamontov/davbackup/v/stable.svg)](https://packagist.org/packages/dmamontov/davbackup)
 [![License](https://poser.pugx.org/dmamontov/davbackup/license.svg)](https://packagist.org/packages/dmamontov/davbackup)
+[![Total Downloads](https://poser.pugx.org/dmamontov/davbackup/downloads)](https://packagist.org/packages/dmamontov/davbackup)
+[![PHP Classes](https://img.shields.io/badge/php-classes-blue.svg)](http://www.phpclasses.org/package/9081-PHP-Backup-files-and-a-database-to-a-WebDav-server.html)
 
 PHP Backup to WebDav Server
 ===========================
