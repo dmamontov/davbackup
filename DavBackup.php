@@ -38,7 +38,7 @@
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @since     File available since Release 1.0.1
+ * @since     File available since Release 1.1.0
  */
 
 /**
@@ -47,88 +47,124 @@
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.1
+ * @version   Release: 1.1.0
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.1
+ * @since     Class available since Release 1.1.0
  * @abstract
  */
 abstract class DavBackup
 {
-    /*
-     * Remote Directory for backups
-     */
-    const REMOTEDIR = 'backup';
-
-    /*
+    /**
      * Directory for the temporary storage of backups
      */
-    const TMPPATH = 'tmp';
+    const TEMPORARY_DIRECTORY_NAME = 'tmp';
 
-    /*
+    /**
      * Archive Type TAR
      */
     const TAR = 0;
 
-    /*
+    /**
      * Archive Type ZIP
      */
     const ZIP = 1;
 
     /**
+     * Archive Type RAR
+     */
+    const RAR = 2;
+
+    /**
      * URL to the cloud
+     *
      * @var string
-     * @static
      * @access private
      */
-    private static $url;
+    private $url;
 
     /**
      * Authorization data
+     *
      * @var array
-     * @static
      * @access private
      */
-    private static $credentials;
+    private $credentials;
+
+    /**
+     * The real path to the temporary directory.
+     *
+     * @var string
+     * @access private
+     */
+    private $realTemporaryDirectory;
+
+    /**
+     * The name of the directory on the server.
+     * 
+     * @var string
+     * @access protected
+     */
+    protected $remoteDirectoryName = 'backup';
 
     /**
      * Path to the directory you want to backup
+     * 
      * @var string
-     * @static
-     * @access private
+     * @access protected
      */
-    private static $path;
+    protected $path;
 
     /**
-     * The name of the archive
-     * @var string
-     * @static
-     * @access private
+     * The connection to the database
+     * 
+     * @var PDO
+     * @access protected
      */
-    private static $name;
+    protected $connection;
+
+    /**
+     * The prefix name of the archive
+     *
+     * @var string
+     * @access protected
+     */
+    protected $prefix;
 
     /**
      * Archive Type
+     * 
      * @var integer
-     * @access public
+     * @access protected
      */
-    public $type = 0;
+    protected $type = 0;
 
     /**
      * Compression
+     *
      * @var bool
-     * @access public
+     * @access protected
      */
-    public $compression = false;
+    protected $compression = false;
+
+    /**
+     * Remove backup file
+     *
+     * @var bool
+     * @access protected
+     */
+    protected $removeFile = true;
 
     /**
      * Type of authorization
+     *
      * @var string
-     * @access public
+     * @access protected
      */
-    public $authtype = '';
+    protected $authtype = '';
 
     /**
      * Sets variables and creates the required directory
+     *
      * @param string $url
      * @param string $login
      * @param string $password
@@ -139,119 +175,57 @@ abstract class DavBackup
     {
         ini_set('memory_limit', '-1');
 
-        self::$url = $url;
-        self::$credentials = array($login, $password);
-        self::$name = (string) time();
+        $this->checkType($this->type);
+        $this->checkUrl($url);
+        $this->url = $url;
 
-        if (file_exists(__DIR__ . '/' . self::TMPPATH . '/') == false) {
-            mkdir(__DIR__ . '/' . self::TMPPATH . '/', 0755);
+        $this->checkCredentials($login, $password);
+        $this->credentials = array($login, $password);
+
+        $this->prefix = (string) time();
+
+        $this->realTemporaryDirectory = sprintf('%s/%s/', __DIR__, self::TEMPORARY_DIRECTORY_NAME);
+
+        if (!file_exists($this->realTemporaryDirectory)) {
+            mkdir($this->realTemporaryDirectory, 0755);
         }
     }
 
     /**
-     * Creates a backup and sends it to the cloud
-     * @return bool
-     * @access public
-     * @final
+     * Validates the server address.
+     *
+     * @param string $url
+     * @throws InvalidArgumentException
      */
-    final public function backup()
+    final private function checkUrl($url)
     {
-        $folder = $this->request(self::$url . self::REMOTEDIR, array('Depth: 0'), 'PROPFIND');
-
-        if ($folder->code == 404) {
-            $folder = $this->request(self::$url . self::REMOTEDIR, array(), 'MKCOL');
+        if (!is_string($url) || is_null($url) || stripos($url, 'http') === false) {
+            throw new InvalidArgumentException('Invalid value for the server address.');
         }
+    }
 
-        if (in_array($folder->code, array(201, 207)) === false) {
-            throw new RuntimeException('Failed to create remote directory', $folder->code);
+    /**
+     * Validates the data for authorization.
+     *
+     * @param string $login
+     * @param string $password
+     * @throws InvalidArgumentException
+     */
+    final private function checkCredentials($login, $password)
+    {
+        if (is_null($login) || empty($login)) {
+            throw new InvalidArgumentException('The `login` can not be empty');
         }
-
-        try {
-            switch ($this->type) {
-                case self::TAR:
-                    $archive = new PharData(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.tar');
-                    break;
-                case self::ZIP:
-                    $archive = new ZipArchive();
-                    $archive->open(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.zip', ZIPARCHIVE::CREATE);
-                    break;
-            }
-
-            if (is_null(self::$path) == false) {
-                switch ($this->type) {
-                    case self::TAR:
-                        $archive->buildFromDirectory(self::$path);
-                        break;
-                    case self::ZIP:
-                        self::$path = str_replace('\\', '/', realpath(self::$path));
-                        $files = new RecursiveIteratorIterator(
-                                     new RecursiveDirectoryIterator(self::$path),
-                                     RecursiveIteratorIterator::SELF_FIRST
-                                 );
-
-                        foreach ($files as $file) {
-                            $file = str_replace('\\', '/', $file);
-                            if (in_array(substr($file, strrpos($file, '/') + 1), array('.', '..'))) {
-                                continue;
-                            }
-
-                            $file = realpath($file);
-                            if (is_file($file) === true) {
-                                $archive->addFile($file, str_replace(self::$path . '/', '', $file));
-                            }
-                        }
-                        break;
-                }
-            }
-            if (file_exists(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql')) {
-                $archive->addFile(
-                    __DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql',
-                    'sql/' . self::$name . '.sql'
-                );
-            }
-
-            if ($this->compression == true && $this->type == self::TAR) {
-                $archive->compress(Phar::GZ);
-                unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.tar');
-            }
-
-            if ($this->type == self::ZIP) {
-                $archive->close();
-            }
-        } catch (Exception $e) {
-            throw new RuntimeException("Failed to create the archive: $e");
-        }
-
-        switch ($this->type) {
-            case self::TAR:
-                $realName = self::$name . '.tar' . ($this->compression == true ? '.gz' : '');
-                break;
-            case self::ZIP:
-                $realName = self::$name . '.zip';
-                break;
-        }
-
-        if (file_exists(__DIR__ . '/' . self::TMPPATH . '/' . $realName)) {
-            $send = $this->request(
-                self::$url . self::REMOTEDIR . '/' . $realName,
-                array('Content-type: application/octet-stream'),
-                'PUT',
-                __DIR__ . '/' . self::TMPPATH . '/' . $realName
-            );
-
-            if (file_exists(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql')) {
-                unlink(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql');
-            }
-            unlink(__DIR__ . '/' . self::TMPPATH . '/' . $realName);
-
-            return $send->code == 201 ? true : false;
+        if (is_null($password) || empty($password)) {
+            throw new InvalidArgumentException('The `password` can not be empty');
         }
     }
 
     /**
      * Set the compression of the archive
+     *
      * @param bool $compression
-     * @return bool
+     * @return DavBackup
      * @access public
      * @final
      */
@@ -259,69 +233,108 @@ abstract class DavBackup
     {
         $this->compression = (bool) $compression;
 
-        return true;
+        return $this;
     }
 
     /**
      * Gets a compressed archive
+     *
      * @return bool
      * @access public
      * @final
      */
-    final public function getCompression()
+    final public function  isCompressed()
     {
         return $this->compression;
     }
 
     /**
-     * Sets the name of the archive
-     * @param mixed $name
+     * Set remove backup file
+     *
+     * @param bool $removeFile
+     * @return DavBackup
+     * @access public
+     * @final
+     */
+    final public function setRemoveFile($removeFile = true)
+    {
+        $this->removeFile = (bool) $removeFile;
+
+        return $this;
+    }
+
+    /**
+     * Gets a remove backup file
+     *
      * @return bool
      * @access public
      * @final
      */
-    final public function setName($name = null)
+    final public function  isRemoveFile()
     {
-        if (is_null($name)) {
-            self::$name = time();
-        } else {
-            self::$name = (string) time() . '-' . str_replace(array(' ', "\n", "\t", '_'), '-', strtolower($name));
-        }
-
-        return true;
+        return $this->removeFile;
     }
 
     /**
-     * It gets the name of the archive
+     * Sets prefix of the archive
+     *
+     * @param string $prefix
+     * @return DavBackup
+     * @access public
+     * @final
+     */
+    final public function setPrefix($prefix)
+    {
+        if (!is_null($prefix) && !empty($prefix)) {
+            $this->prefix = sprintf('%s-%s', time(), $this->clearPrefix($prefix));
+        }
+
+        return $this;
+    }
+
+    /**
+     * It gets prefix of the archive
+     *
      * @return string
      * @access public
      * @final
      */
-    final public function getName()
+    final public function getPrefix()
     {
-        return self::$name;
+        return $this->prefix;
+    }
+
+    /**
+     * Replace invalid characters in the prefix.
+     *
+     * @param string $prefix
+     * @return string
+     */
+    final private function clearPrefix($prefix)
+    {
+        return str_replace(array(' ', "\n", "\t", '_'), '-', strtolower($prefix));
     }
 
     /**
      * Sets type of archive
-     * @param int $type
-     * @return bool
+     *
+     * @param integer $type
+     * @return DavBackup
      * @access public
      * @final
      */
     final public function setType($type = 0)
     {
-        if (in_array($type, array(0, 1))) {
+        if (in_array($type, array(self::TAR, self::ZIP, self::RAR)) && $this->checkType($type)) {
             $this->type = (int) $type;
-        } else {
-            $this->type = 0;
         }
 
-        return true;
+        return $this;
     }
 
     /**
      * Gets type of archive
+     *
      * @return string
      * @access public
      * @final
@@ -329,95 +342,247 @@ abstract class DavBackup
     final public function getType()
     {
         switch ($this->type) {
+            default:
             case self::TAR:
                 return 'tar';
             case self::ZIP:
                 return 'zip';
+            case self::RAR:
+                return 'rar';
+        }
+    }
+
+    /**
+     * Checks classes for archive types.
+     *
+     * @param integer $type
+     * @throws RuntimeException
+     * @return boolean
+     */
+    final private function checkType($type)
+    {
+        switch ($type) {
+            case self::TAR:
+                if (!class_exists('PharData')) {
+                    throw new RuntimeException('PharData class is not in the system, try to select another file type.');
+                }
+
+                return true;
+            case self::ZIP:
+                if (!class_exists('ZipArchive')) {
+                    throw new RuntimeException('ZipArchive class is not in the system, try to select another file type.');
+                }
+
+                return true;
+            case self::RAR:
+                if (!class_exists('RarArchiver')) {
+                    throw new RuntimeException(
+                        'RarArchiver class is not in the system, try to select another file type. It can be downloaded via the link https://github.com/dmamontov/rararchiver.'
+                    );
+                }
+
+                return true;
         }
     }
 
     /**
      * Sets the directory you want to backup
+     *
      * @param string $path
-     * @return bool
+     * @throws InvalidArgumentException
+     * @return DavBackup
      * @access public
      * @final
      */
-    final public function folder($path)
+    final public function setPath($path)
     {
         if (file_exists($path) && is_dir($path)) {
-            self::$path = $path;
-
-            return true;
+            $this->path = realpath($path);
+        } else {
+            throw new InvalidArgumentException('The specified path does not exist or is not a directory.');
         }
 
-        return false;
+        return $this;
     }
 
     /**
-     * Connects to the database and the creation of its temporary backup
      * @param string $dbuser
      * @param string $dbpass
      * @param string $dbname
      * @param string $host
      * @param string $driver
+     * @throws InvalidArgumentException
+     * @return DavBackup
      * @access public
      * @final
      */
-    final public function db($dbuser, $dbpass, $dbname, $host = 'localhost', $driver = 'mysql')
+    final public function setConnection($dbuser, $dbpass, $dbname, $host = 'localhost', $driver = 'mysql')
     {
-        $types = array(
-            'tinyint',
-            'smallint',
-            'mediumint',
-            'int',
-            'bigint',
-            'float',
-            'double',
-            'decimal',
-            'real'
-        );
-
-        $db = new PDO("$driver:host=$host;dbname=$dbname", $dbuser, $dbpass);
-        $db->setAttribute(PDO::ATTR_ORACLE_NULLS, PDO::NULL_NATURAL);
-
-        $file = fopen(__DIR__ . '/' . self::TMPPATH . '/' . self::$name . '.sql', 'a+');
-
-        $tables = array();
-        $sql = $db->query('SHOW TABLES');
-        while ($row = $sql->fetch(PDO::FETCH_NUM)) {
-            array_push($tables, $row[0]);
+        try {
+            $this->connection = new PDO(sprintf('%s:host=%s;dbname=%s', $driver, $host, $dbname), $dbuser, $dbpass);
+        } catch (PDOException $e) {
+            throw new InvalidArgumentException($e->getMessage());
         }
 
+        $this->connection->setAttribute(PDO::ATTR_ORACLE_NULLS, PDO::NULL_NATURAL);
+
+        return $this;
+    }
+
+    /**
+     * It creates and sends the file to a remote server.
+     *
+     * @return DavBackup
+     * @throws RuntimeException
+     * @access public
+     * @final
+     */
+    final public function execute()
+    {
+        $this->createRemoteFolder();
+
+        $archive = $this->getArchive();
+        if (!is_null($this->path)) {
+            $archive = $this->addFiles($archive);
+        }
+
+        if ($this->connection instanceof PDO) {
+            $this->createDbBackup();
+            if (file_exists(sprintf('%s%s.sql', $this->realTemporaryDirectory, $this->prefix))) {
+                $archive->addFile(
+                    sprintf('%s%s.sql', $this->realTemporaryDirectory, $this->prefix),
+                    sprintf('sql/%s.sql', $this->prefix)
+                );
+            }
+        }
+
+        if ($this->type == self::ZIP) {
+            $archive->close();
+        } elseif ($this->compression && $this->type == self::TAR) {
+            $archive->compress(Phar::GZ);
+            @unlink(sprintf('%s%s.tar', $this->realTemporaryDirectory, $this->prefix));
+        }
+
+        $realName = $this->getRealName();
+
+        if (file_exists(sprintf('%s%s', $this->realTemporaryDirectory, $realName))) {
+            $send = $this->request(
+                sprintf('%s%s/%s', $this->url, $this->remoteDirectoryName, $realName),
+                array('Content-type: application/octet-stream'),
+                'PUT',
+                sprintf('%s%s', $this->realTemporaryDirectory, $realName)
+            );
+
+            if (file_exists(sprintf('%s%s.sql', $this->realTemporaryDirectory, $this->prefix))) {
+                @unlink(sprintf('%s%s.sql', $this->realTemporaryDirectory, $this->prefix));
+            }
+            sprintf('%s%s', $this->realTemporaryDirectory, $realName);
+
+            if ($send->code != 201) {
+                throw new RuntimeException('There was an error sending the archive', $send->code);
+            }
+
+            if ($this->isRemoveFile()) {
+                @unlink(sprintf('%s%s', $this->realTemporaryDirectory, $realName));
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Get the real name of the archive.
+     *
+     * @return string
+     * @access private
+     * @final
+     */
+    final private function getRealName()
+    {
+        $realName = '';
+
+        switch ($this->type) {
+            case self::TAR:
+                $realName = sprintf('%s.tar%s', $this->prefix, $this->compression == true ? '.gz' : '');
+                break;
+            case self::ZIP:
+                $realName = sprintf('%s.zip', $this->prefix);
+                break;
+            case self::RAR:
+                $realName = sprintf('%s.rar', $this->prefix);
+                break;
+        }
+
+        return $realName;
+    }
+
+    /**
+     * Create a directory on a remote server.
+     *
+     * @throws RuntimeException
+     * @return DavBackup
+     * @access private
+     * @final
+     */
+    final private function createRemoteFolder()
+    {
+        $folder = sprintf('%s%s', $this->url, $this->remoteDirectoryName);
+
+        $result = $this->request($folder, array('Depth: 0'), 'PROPFIND');
+        if ($result->code == 404) {
+            $result = $this->request($folder, array(), 'MKCOL');
+        }
+
+        if (!in_array($result->code, array(201, 207))) {
+            throw new RuntimeException('Failed to create remote directory', $result->code);
+        }
+
+        return $this;
+    }
+
+    /**
+     * It creates a database dump
+     *
+     * @return DavBackup
+     * @access private
+     * @final
+     */
+    final private function createDbBackup()
+    {
+        $types = array(
+            'tinyint', 'smallint', 'mediumint', 'int',
+            'bigint', 'float', 'double', 'decimal', 'real'
+        );
+
+        $file = new SplFileObject(sprintf('%s%s.sql', $this->realTemporaryDirectory, $this->prefix), 'a+');
+
+        $tables = $this->getTables();
+
         foreach ($tables as $table) {
-            $sql = $db->query("SELECT * FROM $table");
+            $sql = $this->connection->query(sprintf('SELECT * FROM %s', $table));
             $column = $sql->columnCount();
             $rows = $sql->rowCount();
 
-            $result = "DROP TABLE IF EXISTS `$table`;";
+            $result = sprintf('DROP TABLE IF EXISTS %s;', $table);
 
-            $structure = $db->query("SHOW CREATE TABLE $table");
-
+            $structure = $this->connection->query(sprintf('SHOW CREATE TABLE %s', $table));
             $row = $structure->fetch(PDO::FETCH_NUM);
-            $notexists = str_replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS', $row[1]);
-            $result .= "\n\n$notexists;\n\n";
+            $result .= sprintf("\n\n%s;\n\n", str_replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS', $row[1]));
+            unset($structure);
 
-            unset($structure, $notexists);
-
-            fwrite($file, $result);
-
+            $file->fwrite($result);
             $result = '';
 
             if ($rows) {
-                $result = "INSERT INTO `$table` (";
-                $columns = $db->query("SHOW COLUMNS FROM $table");
+                $result = sprintf('INSERT INTO %s (', $table);
+                $columns = $this->connection->query(sprintf('SHOW COLUMNS FROM %s', $table));
 
                 $count = 0;
                 $type = array();
 
                 while ($row = $columns->fetch(PDO::FETCH_NUM)) {
                     $type[$table][] = stripos($row[1], '(') ? stristr($row[1], '(', true) : $row[1];
-                    $result .= "`{$row[0]}`";
+                    $result .= $row[0];
 
                     $count++;
                     if ($count < $columns->rowCount()) {
@@ -428,7 +593,7 @@ abstract class DavBackup
 
                 $result .= ') VALUES';
 
-                fwrite($file, $result);
+                $file->fwrite($result);
 
                 $result = '';
             }
@@ -438,10 +603,10 @@ abstract class DavBackup
                 $result .= "\n\t(";
 
                 for ($i=0; $i < $column; $i++) {
-                    if (isset($row[$i]) && in_array($type[$table][$i], $types) && empty($row[$i]) == false) {
+                    if (isset($row[$i]) && in_array($type[$table][$i], $types) && !empty($row[$i])) {
                         $result .= $row[$i];
                     } elseif (isset($row[$i])) {
-                        $result .= $db->quote($row[$i]);
+                        $result .= $this->connection->quote($row[$i]);
                     } else {
                         $result .= 'NULL';
                     }
@@ -454,20 +619,112 @@ abstract class DavBackup
                 $count++;
                 $result .= $count < $rows ? '),' : ');';
 
-                fwrite($file, $result);
+                $file->fwrite($result);
 
                 $result = '';
             }
 
-            fwrite($file, "\n\n\n\n");
+            $file->fwrite("\n\n\n\n");
         }
 
-        fclose($file);
         unset($file, $result, $tables, $sql, $column, $rows, $row);
+
+        return $this;
+    }
+
+    /**
+     * It gets the name of the table from the database
+     *
+     * @return array
+     * @access private
+     * @final
+     */
+    final private function getTables()
+    {
+        $tables = array();
+
+        $sql = $this->connection->query('SHOW TABLES');
+        while ($row = $sql->fetch(PDO::FETCH_NUM)) {
+            array_push($tables, $row[0]);
+        }
+
+        return $tables;
+    }
+
+    /**
+     * Creates an archive on a specified format.
+     *
+     * @return PharData|ZipArchive
+     * @throws RuntimeException
+     * @access private
+     * @final
+     */
+    final private function getArchive()
+    {
+        $archive = null;
+
+        try {
+            switch ($this->type) {
+                case self::TAR:
+                    $archive = new PharData(sprintf('%s%s.tar', $this->realTemporaryDirectory, $this->prefix));
+                    break;
+                case self::ZIP:
+                    $archive = new ZipArchive();
+                    $archive->open(sprintf('%s%s.zip', $this->realTemporaryDirectory, $this->prefix), ZipArchive::CREATE);
+                    break;
+                case self::RAR:
+                    $archive = new RarArchiver(sprintf('%s%s.rar', $this->realTemporaryDirectory, $this->prefix), RarArchiver::CREATE);
+                    break;
+            }
+        }  catch (Exception $e) {
+            throw new RuntimeException(sprintf('Failed to create the archive: %s', $e->getMessage()));
+        }
+
+        return $archive;
+    }
+
+    /**
+     * Adding files to the archive.
+     *
+     * @param PharData|ZipArchive $archive
+     * @return PharData|ZipArchive
+     * @access private
+     * @final
+     */
+    final private function addFiles($archive)
+    {
+        switch ($this->type) {
+            case self::RAR:
+            case self::TAR:
+                $archive->buildFromDirectory($this->path);
+                break;
+            case self::ZIP:
+                $this->backupDir = str_replace('\\', '/', realpath($this->path));
+                $files = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($this->path),
+                    RecursiveIteratorIterator::SELF_FIRST
+                );
+
+                foreach ($files as $file) {
+                    $file = str_replace('\\', '/', $file);
+                    if (in_array(substr($file, strrpos($file, '/') + 1), array('.', '..'))) {
+                        continue;
+                    }
+
+                    $file = realpath($file);
+                    if (is_file($file)) {
+                        $archive->addFile($file, trim(str_replace($this->path, '', $file), '/'));
+                    }
+                }
+                break;
+        }
+
+        return $archive;
     }
 
     /**
      * Executes queries to the cloud
+     *
      * @param string $url
      * @param array $headers
      * @param string $method
@@ -485,7 +742,7 @@ abstract class DavBackup
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_HEADER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_USERPWD, implode(':', self::$credentials));
+        curl_setopt($ch, CURLOPT_USERPWD, implode(':', $this->credentials));
 
         if (empty($this->authtype) === false) {
             curl_setopt($ch, CURLOPT_HTTPAUTH, $this->authtype);
@@ -522,9 +779,9 @@ abstract class DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.1
+ * @version   Release: 1.1.0
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.1
+ * @since     Class available since Release 1.1.0
  */
 class YandexBackup extends DavBackup
 {
@@ -552,9 +809,9 @@ class YandexBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.1
+ * @version   Release: 1.1.0
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.1
+ * @since     Class available since Release 1.1.0
  * @todo      working through service appspot.com
  */
 class GoogleBackup extends DavBackup
@@ -583,9 +840,9 @@ class GoogleBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.1
+ * @version   Release: 1.1.0
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.1
+ * @since     Class available since Release 1.1.0
  * @todo      working through service dropdav.com
  */
 class DropBoxBackup extends DavBackup
@@ -614,9 +871,9 @@ class DropBoxBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.1
+ * @version   Release: 1.1.0
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.1
+ * @since     Class available since Release 1.1.0
  */
 class CloudMeBackup extends DavBackup
 {
@@ -645,9 +902,9 @@ class CloudMeBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.1
+ * @version   Release: 1.1.0
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.1
+ * @since     Class available since Release 1.1.0
  * @todo      mail.ru temporarily disable access to WebDAV
  */
 class MailBackup extends DavBackup
@@ -677,9 +934,9 @@ class MailBackup extends DavBackup
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @version   Release: 1.0.1
+ * @version   Release: 1.1.0
  * @link      https://github.com/dmamontov/davbackup
- * @since     Class available since Release 1.0.1
+ * @since     Class available since Release 1.1.0
  * @todo      microsoft temporarily disable access to WebDAV
  */
 class OneDriveBackup extends DavBackup

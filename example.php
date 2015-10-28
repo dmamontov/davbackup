@@ -38,18 +38,16 @@
  * @author    Dmitry Mamontov <d.slonyara@gmail.com>
  * @copyright 2015 Dmitry Mamontov <d.slonyara@gmail.com>
  * @license   http://www.opensource.org/licenses/BSD-3-Clause  The BSD 3-Clause License
- * @since     File available since Release 1.0.1
+ * @since     File available since Release 1.1.0
  */
- 
+
 require 'DavBackup.php';
 
 $ya = new YandexBackup('test@yandex.ru', 'test');
 
-$ya->setName('My Backup');
-$ya->setType(YandexBackup::ZIP);
-
-$ya->db('user', 'password', 'db');
-$ya->folder('/var/www/public_html/');
-
-$ya->backup();
+$ya->setConnection('user', 'password', 'db')
+   ->setPath('/var/www/public_html')
+   ->setType(YandexBackup::ZIP)
+   ->setRemoveFile(false)
+   ->execute();
 ?>
